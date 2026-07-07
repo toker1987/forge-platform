@@ -1,8 +1,6 @@
 import { useRef, useEffect } from "react"
 
-interface Particle {
-  x: number; y: number; vx: number; vy: number; radius: number; color: string; group: number
-}
+interface Particle { x: number; y: number; vx: number; vy: number; radius: number; color: string; group: number }
 
 const COLORS = [
   "rgba(59,130,246,0.6)", "rgba(59,130,246,0.4)", "rgba(245,158,11,0.5)",
@@ -22,13 +20,14 @@ export default function SwarmCanvas() {
     if (!ctx) return
 
     const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+      const dpr = Math.min(window.devicePixelRatio, 2)
+      canvas.width = canvas.offsetWidth * dpr
+      canvas.height = canvas.offsetHeight * dpr
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     resize()
 
-    const count = 60
+    const count = typeof window !== 'undefined' && window.innerWidth < 640 ? 35 : 60
     const w = canvas.offsetWidth
     const h = canvas.offsetHeight
     particlesRef.current = Array.from({ length: count }, () => ({
@@ -92,7 +91,6 @@ export default function SwarmCanvas() {
     }
     rafRef.current = requestAnimationFrame(animate)
     window.addEventListener("resize", resize, { passive: true })
-
     return () => {
       cancelAnimationFrame(rafRef.current)
       canvas.removeEventListener("mousemove", handleMouseMove)

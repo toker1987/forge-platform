@@ -8,23 +8,24 @@
     --foreground: 210 40% 98%;
     --card: 217 33% 17%;
     --card-foreground: 210 40% 98%;
-    --popover: 217 33% 17%;
+    --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
     --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 217 33% 22%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 22%;
+    --muted: 217 33% 17%;
     --muted-foreground: 215 20% 55%;
-    --accent: 217 33% 22%;
+    --accent: 217 33% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 348 100% 61%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 20% 30%;
+    --input: 215 20% 25%;
     --ring: 217 91% 60%;
-    --radius: 0.625rem;
+    --radius: 0.75rem;
 
+    /* FORGE Design Tokens */
     --bg-base: #0F172A;
     --bg-surface: #1E293B;
     --bg-surface-elevated: #334155;
@@ -32,15 +33,25 @@
     --text-primary: #F8FAFC;
     --text-secondary: #94A3B8;
     --text-tertiary: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-blue-glow: rgba(59, 130, 246, 0.3);
+    --accent-amber: #F59E0B;
+    --accent-amber-glow: rgba(245, 158, 11, 0.3);
+    --accent-emerald: #10B981;
+    --accent-rose: #F43F5E;
   }
 
-  html { color-scheme: dark; }
-  body {
-    @apply bg-forge-base text-forge-text-primary antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
+  * {
+    border-color: hsl(var(--border));
   }
-  * { @apply border-border; }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 @layer components {
@@ -52,21 +63,24 @@
     border-radius: 12px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
   }
-  .status-badge {
-    @apply rounded-full px-2.5 py-0.5 text-[11px] font-medium border whitespace-nowrap;
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
-  .status-idea { @apply border-forge-amber/30 bg-forge-amber/10 text-forge-amber; }
-  .status-case { @apply border-forge-blue/30 bg-forge-blue/10 text-forge-blue; }
-  .status-build { @apply border-forge-purple/30 bg-forge-purple/10 text-forge-purple; }
-  .status-qa { @apply border-forge-amber/30 bg-forge-amber/10 text-forge-amber; }
-  .status-live { @apply border-forge-emerald/30 bg-forge-emerald/10 text-forge-emerald; }
-  .status-rejected { @apply border-forge-rose/30 bg-forge-rose/10 text-forge-rose; }
-  .hero-fade { background: linear-gradient(to bottom, transparent 0%, #0F172A 100%); }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer utilities {
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .no-scrollbar::-webkit-scrollbar { display: none; }
-  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .font-space-grotesk {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .font-inter {
+    font-family: 'Inter', sans-serif;
+  }
+  .font-jetbrains-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
 }

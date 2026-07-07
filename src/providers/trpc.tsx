@@ -7,7 +7,26 @@ import type { ReactNode } from "react";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const queryClient = new QueryClient();
+/* ─── Query Client ────────────────────────────────────────────────
+ * retry: false         → don't loop on 404 (backend may not exist)
+ * refetchOnWindowFocus → disabled for demo stability
+ * staleTime: Infinity  → cache forever once resolved
+ * gcTime: 10 min       → keep data in memory for 10 min
+ * ---------------------------------------------------------------- */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      gcTime: 1000 * 60 * 10,
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+});
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({

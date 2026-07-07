@@ -4,32 +4,10 @@
 
 @layer base {
   :root {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 215 20% 30%;
-    --input: 215 20% 25%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
-
-    /* FORGE Design Tokens */
-    --bg-base: #0F172A;
-    --bg-surface: #1E293B;
-    --bg-surface-elevated: #334155;
-    --bg-surface-dark: #0B1120;
+    --bg-base: #080c14;
+    --bg-surface: #0c111b;
+    --bg-surface-elevated: #111827;
+    --bg-surface-dark: #060a10;
     --text-primary: #F8FAFC;
     --text-secondary: #94A3B8;
     --text-tertiary: #64748B;
@@ -39,18 +17,45 @@
     --accent-amber-glow: rgba(245, 158, 11, 0.3);
     --accent-emerald: #10B981;
     --accent-rose: #F43F5E;
-  }
 
-  * {
-    border-color: hsl(var(--border));
+    --background: 220 35% 4%;
+    --foreground: 210 40% 98%;
+    --card: 220 30% 7%;
+    --card-foreground: 210 40% 98%;
+    --popover: 220 35% 4%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 19% 18%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 19% 18%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 217 19% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 19% 15%;
+    --input: 215 19% 15%;
+    --ring: 217 91% 60%;
+    --radius: 0.625rem;
+    --sidebar-background: 220 35% 5%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 19% 18%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 19% 12%;
+    --sidebar-ring: 217 91% 60%;
   }
 
   body {
-    background-color: var(--bg-base);
-    color: var(--text-primary);
-    font-family: 'Inter', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    @apply bg-[#080c14] text-[#F8FAFC] antialiased;
+    overflow-x: hidden;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  * {
+    @apply border-border;
   }
 }
 
@@ -64,23 +69,55 @@
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
   }
 
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .glow-blue {
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
   }
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
+
+  .glow-amber {
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 40px rgba(16, 185, 129, 0.15);
+  }
+
+  .glow-rose {
+    box-shadow: 0 0 40px rgba(244, 63, 94, 0.15);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 40px rgba(167, 139, 250, 0.15);
+  }
+
+  .text-gradient-blue {
+    background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
 
 @layer utilities {
-  .font-space-grotesk {
-    font-family: 'Space Grotesk', sans-serif;
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
-  .font-inter {
-    font-family: 'Inter', sans-serif;
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
-  .font-jetbrains-mono {
-    font-family: 'JetBrains Mono', monospace;
+
+  .noise-overlay {
+    position: relative;
+  }
+
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 1;
   }
 }

@@ -1,120 +1,286 @@
-import { Link } from "react-router-dom"
-import { motion } from "framer-motion"
-import { FolderKanban, Activity, TrendingUp, Hammer, CheckCircle2, Clock, ChevronRight, Zap, AlertCircle } from "lucide-react"
-import GlassCard from "@/components/GlassCard"
+import { useMemo } from "react";
+import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
+import { trpc } from "@/providers/trpc";
+import GlassCard from "@/components/GlassCard";
+import {
+  FolderKanban,
+  Bot,
+  Radio,
+  TrendingUp,
+  Activity,
+  PlusCircle,
+  ArrowRight,
+  Terminal,
+} from "lucide-react";
 
-const stats = [
-  { label: "Active Projects", value: 12, icon: FolderKanban, color: "text-forge-blue" },
-  { label: "Agents Active", value: 5, icon: Activity, color: "text-forge-emerald" },
-  { label: "Trends", value: 47, icon: TrendingUp, color: "text-forge-amber" },
-  { label: "Builds Done", value: 8, icon: Hammer, color: "text-forge-purple" },
-]
-
-const feedItems = [
-  { agent: "Trend Scout", action: "Discovered 3 new signals in AI dev tools", time: "2m ago", type: "info" },
-  { agent: "Business Analyst", action: "Completed case — confidence: 87%", time: "15m ago", type: "success" },
-  { agent: "Orchestrator", action: "Approval required: Smart Contract Auditor", time: "32m ago", type: "warning" },
-  { agent: "Builder Guild", action: "Frontend build complete for #2841", time: "1h ago", type: "success" },
-  { agent: "QA", action: "Security scan passed — 0 critical issues", time: "2h ago", type: "success" },
-  { agent: "Trend Scout", action: "Signal velocity dropping for no-code DBs", time: "3h ago", type: "info" },
-  { agent: "Builder Guild", action: "Backend API tests failing — retrying", time: "4h ago", type: "error" },
-]
-
-const activeProjects = [
-  { id: "2841", name: "AI Code Review Agent", status: "IN_BUILD", stage: "Frontend implementation", progress: 72 },
-  { id: "2840", name: "Smart Contract Auditor", status: "CASE_BUILT", stage: "Awaiting approval", progress: 35 },
-  { id: "2839", name: "DevOps Metrics Dashboard", status: "QA_REVIEW", stage: "Security scanning", progress: 91 },
-  { id: "2838", name: "API Rate Limiter", status: "LIVE", stage: "Deployed", progress: 100 },
-]
-
-const statusConfig: Record<string, { class: string; label: string }> = {
-  IDEA_SCOUTED: { class: "status-idea", label: "Researching" },
-  CASE_BUILT: { class: "status-case", label: "Review" },
-  IN_BUILD: { class: "status-build", label: "Building" },
-  QA_REVIEW: { class: "status-qa", label: "QA" },
-  LIVE: { class: "status-live", label: "Live" },
-  REJECTED: { class: "status-rejected", label: "Rejected" },
+/* ─── Animated Stat Card ──────────────────────────────────────── */
+function StatCard({
+  label,
+  value,
+  change,
+  icon: Icon,
+  iconColor,
+  delay,
+}: {
+  label: string;
+  value: string;
+  change: string;
+  icon: React.ElementType;
+  iconColor: string;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay, ease: "easeOut" as const }}
+      whileHover={{ y: -2 }}
+      className="will-change-transform"
+    >
+      <GlassCard className="p-4 sm:p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-[#94A3B8] font-medium uppercase tracking-wide">
+            {label}
+          </span>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ backgroundColor: `${iconColor}15` }}
+          >
+            <Icon size={16} style={{ color: iconColor }} />
+          </div>
+        </div>
+        <div className="font-space-grotesk font-bold text-xl sm:text-2xl text-[#F8FAFC] mb-1">
+          {value}
+        </div>
+        <div className="text-xs text-[#10B981]">{change}</div>
+      </GlassCard>
+    </motion.div>
+  );
 }
 
+/* ─── Format relative time ────────────────────────────────────── */
+function formatTimeAgo(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/* ─── Agent colour map ─────────────────────────────────────────── */
+const agentColors: Record<string, string> = {
+  TrendScout: "#F59E0B",
+  BusinessAnalyst: "#3B82F6",
+  PMOrchestrator: "#A78BFA",
+  BuilderGuild: "#10B981",
+  QADeploy: "#F43F5E",
+};
+
 export default function Dashboard() {
+  const { data, isLoading } = trpc.project.list.useQuery({});
+  const projects = data?.projects ?? [];
+
+  /* derive stats from real data */
+  const stats = useMemo(() => {
+    const active = projects.filter(
+      (p) => p.status !== "REJECTED" && p.status !== "LIVE"
+    ).length;
+    const live = projects.filter((p) => p.status === "LIVE").length;
+    const total = projects.length || 1;
+    const successRate = Math.round((live / total) * 100);
+    return { active, successRate };
+  }, [projects]);
+
+  /* grab the most-recent project for its agent logs */
+  const recentProject = projects[0];
+  const { data: logData } = trpc.agentLog.list.useQuery(
+    { projectId: recentProject?.id ?? 0 },
+    { enabled: !!recentProject }
+  );
+  const logs = logData?.logs ?? [];
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {stats.map((stat, i) => (
-          <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}>
-            <GlassCard className="flex items-center gap-3 sm:gap-4">
-              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-forge-surface-elevated/50 flex items-center justify-center ${stat.color} shrink-0`}>
-                <stat.icon size={16} className="sm:hidden" />
-                <stat.icon size={20} className="hidden sm:block" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg sm:text-2xl font-bold text-forge-text-primary">{stat.value}</p>
-                <p className="text-[10px] sm:text-xs text-forge-text-tertiary truncate">{stat.label}</p>
-              </div>
-            </GlassCard>
-          </motion.div>
-        ))}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="font-space-grotesk font-bold text-xl sm:text-2xl text-[#F8FAFC]">
+            Dashboard
+          </h1>
+          <p className="text-xs sm:text-sm text-[#94A3B8] mt-1">
+            Command center for your autonomous builds
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link
+            to="/projects"
+            className="flex items-center gap-1.5 text-xs sm:text-sm font-medium text-[#94A3B8] hover:text-[#F8FAFC] border border-[#334155] hover:border-[#64748B] px-3 py-2 rounded-lg transition-all"
+          >
+            <FolderKanban size={14} />
+            All Projects
+          </Link>
+          <Link
+            to="/projects"
+            className="flex items-center gap-1.5 text-xs sm:text-sm font-medium bg-[#3B82F6] hover:bg-[#2563EB] text-white px-3 py-2 rounded-lg transition-all active:scale-[0.98]"
+          >
+            <PlusCircle size={14} />
+            New Project
+          </Link>
+        </div>
       </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard
+          label="Active Projects"
+          value={isLoading ? "—" : String(stats.active)}
+          change="+2 this week"
+          icon={FolderKanban}
+          iconColor="#3B82F6"
+          delay={0}
+        />
+        <StatCard
+          label="Agents Online"
+          value="5"
+          change="All systems operational"
+          icon={Bot}
+          iconColor="#10B981"
+          delay={0.08}
+        />
+        <StatCard
+          label="Signals Today"
+          value="1,247"
+          change="+12% from yesterday"
+          icon={Radio}
+          iconColor="#F59E0B"
+          delay={0.16}
+        />
+        <StatCard
+          label="Success Rate"
+          value={isLoading ? "—" : `${stats.successRate}%`}
+          change="Across all builds"
+          icon={TrendingUp}
+          iconColor="#A78BFA"
+          delay={0.24}
+        />
+      </div>
+
+      {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2">
-          <GlassCard className="p-3 sm:p-5 lg:p-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-sm sm:text-lg font-semibold text-forge-text-primary flex items-center gap-2">
-                <Activity size={16} className="text-forge-blue sm:hidden" />
-                <Activity size={18} className="text-forge-blue hidden sm:block" />
-                Agent Activity
-              </h2>
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-forge-emerald opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-forge-emerald" />
-              </span>
-            </div>
-            <div className="space-y-2 sm:space-y-3 max-h-[350px] sm:max-h-[400px] overflow-y-auto scrollbar-hide pr-1">
-              {feedItems.map((item, i) => (
-                <div key={i} className="flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-lg bg-forge-surface/30 hover:bg-forge-surface/50 transition-colors">
-                  {item.type === "success" && <CheckCircle2 size={14} className="text-forge-emerald shrink-0 mt-0.5 sm:hidden" />}
-                  {item.type === "success" && <CheckCircle2 size={16} className="text-forge-emerald shrink-0 mt-0.5 hidden sm:block" />}
-                  {item.type === "warning" && <AlertCircle size={14} className="text-forge-amber shrink-0 mt-0.5 sm:hidden" />}
-                  {item.type === "warning" && <AlertCircle size={16} className="text-forge-amber shrink-0 mt-0.5 hidden sm:block" />}
-                  {item.type === "error" && <AlertCircle size={14} className="text-forge-rose shrink-0 mt-0.5 sm:hidden" />}
-                  {item.type === "error" && <AlertCircle size={16} className="text-forge-rose shrink-0 mt-0.5 hidden sm:block" />}
-                  {item.type === "info" && <Zap size={14} className="text-forge-blue shrink-0 mt-0.5 sm:hidden" />}
-                  {item.type === "info" && <Zap size={16} className="text-forge-blue shrink-0 mt-0.5 hidden sm:block" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm text-forge-text-primary"><span className="font-medium text-forge-blue">{item.agent}:</span>{" "}{item.action}</p>
-                    <p className="text-[10px] sm:text-xs text-forge-text-tertiary mt-0.5 flex items-center gap-1"><Clock size={9} className="sm:hidden" /><Clock size={10} className="hidden sm:block" /> {item.time}</p>
-                  </div>
+        {/* Agent Activity Feed */}
+        <GlassCard className="lg:col-span-2 p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Terminal size={16} className="text-[#3B82F6]" />
+            <h2 className="font-semibold text-sm sm:text-base text-[#F8FAFC]">
+              Agent Activity Feed
+            </h2>
+            <span className="ml-auto flex items-center gap-1 text-xs text-[#10B981]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+              Live
+            </span>
+          </div>
+
+          <div className="space-y-2 max-h-[360px] overflow-y-auto no-scrollbar pr-1">
+            {isLoading && (
+              <div className="text-sm text-[#64748B] py-4 text-center">
+                Loading activity feed...
+              </div>
+            )}
+            {!isLoading && logs.length === 0 && (
+              <div className="text-sm text-[#64748B] py-4 text-center">
+                No agent activity yet. Create a project to get started.
+              </div>
+            )}
+            {logs.map((log, i) => (
+              <motion.div
+                key={log.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.05 }}
+                className="flex items-start gap-3 p-2.5 rounded-lg bg-[rgba(15,23,42,0.4)] hover:bg-[rgba(15,23,42,0.6)] transition-colors"
+              >
+                <span
+                  className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                  style={{
+                    backgroundColor:
+                      agentColors[log.agentName] ?? "#94A3B8",
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm text-[#F8FAFC] truncate">
+                    <span
+                      className="font-medium"
+                      style={{
+                        color: agentColors[log.agentName] ?? "#94A3B8",
+                      }}
+                    >
+                      [{log.agentName}]
+                    </span>{" "}
+                    {log.message}
+                  </p>
+                  <p className="text-xs text-[#64748B] mt-0.5">
+                    {formatTimeAgo(log.createdAt)}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </GlassCard>
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <GlassCard className="p-3 sm:p-5 lg:p-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-sm sm:text-lg font-semibold text-forge-text-primary">Active</h2>
-              <Link to="/projects" className="text-[10px] sm:text-xs text-forge-blue hover:underline flex items-center gap-0.5">View All <ChevronRight size={10} /></Link>
-            </div>
-            <div className="space-y-2.5 sm:space-y-3">
-              {activeProjects.map((project) => {
-                const status = statusConfig[project.status]
-                return (
-                  <Link key={project.id} to={`/projects/${project.id}/build`} className="block p-2.5 sm:p-3 rounded-lg bg-forge-surface/30 hover:bg-forge-surface/50 transition-colors">
-                    <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                      <p className="text-xs sm:text-sm font-medium text-forge-text-primary truncate pr-2">{project.name}</p>
-                      <span className={`status-badge shrink-0 ${status.class}`}>{status.label}</span>
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-forge-text-tertiary mb-1.5 sm:mb-2">{project.stage}</p>
-                    <div className="w-full h-1.5 bg-forge-surface-elevated/30 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${project.progress}%`, background: project.progress === 100 ? "#10B981" : project.progress > 70 ? "#3B82F6" : project.progress > 35 ? "#A78BFA" : "#F59E0B" }} />
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </GlassCard>
-        </motion.div>
+              </motion.div>
+            ))}
+          </div>
+        </GlassCard>
+
+        {/* Active Projects sidebar */}
+        <GlassCard className="p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={16} className="text-[#3B82F6]" />
+            <h2 className="font-semibold text-sm sm:text-base text-[#F8FAFC]">
+              Recent Projects
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            {isLoading && (
+              <div className="text-sm text-[#64748B] py-4 text-center">
+                Loading projects...
+              </div>
+            )}
+            {!isLoading && projects.length === 0 && (
+              <div className="text-sm text-[#64748B] py-4 text-center">
+                No projects yet.
+                <Link
+                  to="/projects"
+                  className="block text-[#3B82F6] mt-1"
+                >
+                  Create your first project
+                </Link>
+              </div>
+            )}
+            {projects.slice(0, 5).map((project) => (
+              <Link
+                key={project.id}
+                to={`/projects/${project.id}/case`}
+                className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-[rgba(15,23,42,0.5)] transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[rgba(59,130,246,0.1)] flex items-center justify-center shrink-0">
+                  <FolderKanban size={14} className="text-[#3B82F6]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-[#F8FAFC] truncate group-hover:text-[#3B82F6] transition-colors">
+                    {project.name}
+                  </p>
+                  <p className="text-xs text-[#64748B]">{project.status}</p>
+                </div>
+                <ArrowRight
+                  size={14}
+                  className="text-[#64748B] group-hover:text-[#3B82F6] transition-colors shrink-0"
+                />
+              </Link>
+            ))}
+          </div>
+        </GlassCard>
       </div>
     </div>
-  )
+  );
 }

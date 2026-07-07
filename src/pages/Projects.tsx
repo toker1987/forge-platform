@@ -1,126 +1,322 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
-import { motion } from "framer-motion"
-import { Search, Plus, MoreHorizontal, Clock } from "lucide-react"
-import GlassCard from "@/components/GlassCard"
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { trpc } from "@/providers/trpc";
+import GlassCard from "@/components/GlassCard";
+import {
+  Search,
+  PlusCircle,
+  Filter,
+  FolderKanban,
+  ChevronRight,
+  X,
+  Loader2,
+} from "lucide-react";
 
-type Status = "IDEA_SCOUTED" | "CASE_BUILT" | "IN_BUILD" | "QA_REVIEW" | "LIVE" | "REJECTED"
-type TenantMode = "internal" | "client"
+/* ─── Status badge colours ─────────────────────────────────────── */
+const statusConfig: Record<
+  string,
+  { color: string; bg: string; label: string }
+> = {
+  IDEA_SCOUTED: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)", label: "Idea" },
+  CASE_BUILT: { color: "#3B82F6", bg: "rgba(59,130,246,0.1)", label: "Case Built" },
+  IN_BUILD: { color: "#A78BFA", bg: "rgba(167,139,250,0.1)", label: "In Build" },
+  QA_REVIEW: { color: "#F59E0B", bg: "rgba(245,158,11,0.1)", label: "QA" },
+  LIVE: { color: "#10B981", bg: "rgba(16,185,129,0.1)", label: "Live" },
+  REJECTED: { color: "#F43F5E", bg: "rgba(244,63,94,0.1)", label: "Rejected" },
+};
 
-interface Project {
-  id: string; name: string; status: Status; mode: TenantMode; niche: string; signalStrength: number; lastUpdated: string
+function StatusBadge({ status }: { status: string }) {
+  const cfg = statusConfig[status] ?? { color: "#94A3B8", bg: "rgba(148,163,184,0.1)", label: status };
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+      style={{ color: cfg.color, backgroundColor: cfg.bg, borderColor: cfg.color }}
+    >
+      {cfg.label}
+    </span>
+  );
 }
 
-const statusConfig: Record<Status, { class: string; label: string }> = {
-  IDEA_SCOUTED: { class: "status-idea", label: "Researching" },
-  CASE_BUILT: { class: "status-case", label: "Review" },
-  IN_BUILD: { class: "status-build", label: "Building" },
-  QA_REVIEW: { class: "status-qa", label: "QA" },
-  LIVE: { class: "status-live", label: "Live" },
-  REJECTED: { class: "status-rejected", label: "Rejected" },
+/* ─── Signal dots ──────────────────────────────────────────────── */
+function SignalDots({ strength }: { strength: string }) {
+  const dots = strength === "Strong" ? 3 : strength === "Medium" ? 2 : 1;
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 rounded-full"
+          style={{
+            backgroundColor: i <= dots ? "#3B82F6" : "#334155",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
-const mockProjects: Project[] = [
-  { id: "2841", name: "AI Code Review Agent", status: "IN_BUILD", mode: "internal", niche: "dev-tools", signalStrength: 92, lastUpdated: "5m ago" },
-  { id: "2840", name: "Smart Contract Auditor", status: "CASE_BUILT", mode: "client", niche: "web3", signalStrength: 87, lastUpdated: "32m ago" },
-  { id: "2839", name: "DevOps Metrics Dashboard", status: "QA_REVIEW", mode: "internal", niche: "devops", signalStrength: 78, lastUpdated: "1h ago" },
-  { id: "2838", name: "API Rate Limiter", status: "LIVE", mode: "internal", niche: "infra", signalStrength: 95, lastUpdated: "3h ago" },
-  { id: "2837", name: "No-Code DB Builder", status: "REJECTED", mode: "internal", niche: "nocode", signalStrength: 42, lastUpdated: "1d ago" },
-  { id: "2836", name: "AI Test Generator", status: "LIVE", mode: "client", niche: "qa", signalStrength: 89, lastUpdated: "2d ago" },
-  { id: "2835", name: "Prompt Engineering Studio", status: "IDEA_SCOUTED", mode: "internal", niche: "ai", signalStrength: 71, lastUpdated: "5h ago" },
-  { id: "2834", name: "Security Scanner SaaS", status: "IN_BUILD", mode: "client", niche: "security", signalStrength: 84, lastUpdated: "6h ago" },
-]
+/* ─── Create Project Modal ────────────────────────────────────── */
+function CreateProjectModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
 
-export default function Projects() {
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<Status | "all">("all")
-  const [modeFilter, setModeFilter] = useState<TenantMode | "all">("all")
+  const create = trpc.project.create.useMutation({
+    onSuccess: () => {
+      utils.project.list.invalidate();
+      setName("");
+      setDescription("");
+      onClose();
+    },
+  });
 
-  const filtered = mockProjects.filter((p) => {
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
-    if (statusFilter !== "all" && p.status !== statusFilter) return false
-    if (modeFilter !== "all" && p.mode !== modeFilter) return false
-    return true
-  })
+  if (!open) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-forge-text-primary">Projects</h1>
-          <p className="text-sm text-forge-text-secondary mt-1">{filtered.length} project{filtered.length !== 1 ? "s" : ""}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="glass-card p-5 sm:p-6 w-full max-w-md"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-semibold text-lg text-[#F8FAFC]">
+            Create New Project
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-1 text-[#94A3B8] hover:text-[#F8FAFC]"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <button className="inline-flex items-center gap-2 bg-forge-blue hover:bg-forge-blue/90 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-all active:scale-[0.98]">
-          <Plus size={16} /> New Project
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-[#94A3B8] mb-1.5">
+              Project Name *
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., AI Code Review Agent"
+              className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-[#94A3B8] mb-1.5">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the project idea..."
+              rows={3}
+              className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all resize-none"
+            />
+          </div>
+          <button
+            onClick={() => name.trim() && create.mutate({ name: name.trim(), description: description || undefined })}
+            disabled={!name.trim() || create.isPending}
+            className="w-full flex items-center justify-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-all active:scale-[0.98]"
+          >
+            {create.isPending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <PlusCircle size={16} />
+            )}
+            Create Project
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─── Main Page ────────────────────────────────────────────────── */
+export default function Projects() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [showCreate, setShowCreate] = useState(false);
+
+  const { data, isLoading } = trpc.project.list.useQuery(
+    statusFilter ? { status: statusFilter as "IDEA_SCOUTED" } : {}
+  );
+  const projects = data?.projects ?? [];
+
+  const filtered = projects.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="font-space-grotesk font-bold text-xl sm:text-2xl text-[#F8FAFC]">
+            Projects
+          </h1>
+          <p className="text-xs sm:text-sm text-[#94A3B8] mt-1">
+            Manage and track your autonomous product builds
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium px-4 py-2.5 rounded-lg transition-all active:scale-[0.98]"
+        >
+          <PlusCircle size={16} />
+          New Project
         </button>
       </div>
-      <GlassCard className="flex flex-col sm:flex-row gap-3">
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-forge-text-tertiary" />
-          <input type="text" placeholder="Search projects..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-forge-base border border-forge-surface-elevated/30 rounded-lg pl-9 pr-4 py-2 text-sm text-forge-text-primary placeholder:text-forge-text-tertiary focus:outline-none focus:border-forge-blue focus:ring-2 focus:ring-forge-blue/20" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects..."
+            className="w-full bg-[#0F172A] border border-[#334155] rounded-lg pl-9 pr-3 py-2 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all"
+          />
         </div>
         <div className="flex gap-2">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "all")}
-            className="bg-forge-base border border-forge-surface-elevated/30 rounded-lg px-3 py-2 text-sm text-forge-text-primary focus:outline-none focus:border-forge-blue">
-            <option value="all">All Status</option>
-            {Object.entries(statusConfig).map(([key, { label }]) => (<option key={key} value={key}>{label}</option>))}
-          </select>
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as TenantMode | "all")}
-            className="bg-forge-base border border-forge-surface-elevated/30 rounded-lg px-3 py-2 text-sm text-forge-text-primary focus:outline-none focus:border-forge-blue">
-            <option value="all">All Modes</option>
-            <option value="internal">Internal</option>
-            <option value="client">Client</option>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2 text-sm text-[#F8FAFC] outline-none focus:border-[#3B82F6]"
+          >
+            <option value="">All Status</option>
+            <option value="IDEA_SCOUTED">Idea</option>
+            <option value="CASE_BUILT">Case Built</option>
+            <option value="IN_BUILD">In Build</option>
+            <option value="QA_REVIEW">QA</option>
+            <option value="LIVE">Live</option>
+            <option value="REJECTED">Rejected</option>
           </select>
         </div>
-      </GlassCard>
-      <GlassCard className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-forge-surface-elevated/20">
-                <th className="text-left text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-6 py-3">Project</th>
-                <th className="text-left text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-4 py-3">Status</th>
-                <th className="text-left text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-4 py-3">Mode</th>
-                <th className="text-left text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-4 py-3">Signal</th>
-                <th className="text-left text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-4 py-3">Updated</th>
-                <th className="text-right text-xs font-semibold text-forge-text-tertiary uppercase tracking-wider px-6 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((project, i) => (
-                <motion.tr key={project.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                  className="border-b border-forge-surface-elevated/10 hover:bg-forge-surface/20 transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <Link to={`/projects/${project.id}/build`} className="text-sm font-medium text-forge-text-primary hover:text-forge-blue transition-colors">{project.name}</Link>
-                      <p className="text-xs text-forge-text-tertiary mt-0.5">ID: {project.id} &middot; {project.niche}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4"><span className={`status-badge ${statusConfig[project.status].class}`}>{statusConfig[project.status].label}</span></td>
-                  <td className="px-4 py-4"><span className={`text-xs font-medium capitalize ${project.mode === "client" ? "text-forge-purple" : "text-forge-text-secondary"}`}>{project.mode}</span></td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 h-1.5 bg-forge-surface-elevated/30 rounded-full overflow-hidden"><div className="h-full rounded-full bg-forge-blue" style={{ width: `${project.signalStrength}%` }} /></div>
-                      <span className="text-xs text-forge-text-secondary">{project.signalStrength}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4"><span className="text-xs text-forge-text-tertiary flex items-center gap-1"><Clock size={10} /> {project.lastUpdated}</span></td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {project.status === "CASE_BUILT" && (
-                        <Link to={`/projects/${project.id}/case`} className="text-xs bg-forge-blue/10 text-forge-blue hover:bg-forge-blue/20 px-3 py-1.5 rounded-md transition-colors font-medium">Review</Link>
-                      )}
-                      <button className="p-1.5 text-forge-text-tertiary hover:text-forge-text-primary rounded-md hover:bg-forge-surface transition-colors"><MoreHorizontal size={14} /></button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+      </div>
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="text-center py-12">
+          <Loader2 size={24} className="animate-spin text-[#3B82F6] mx-auto mb-2" />
+          <p className="text-sm text-[#94A3B8]">Loading projects...</p>
         </div>
-        {filtered.length === 0 && <div className="py-12 text-center"><p className="text-sm text-forge-text-tertiary">No projects match your filters.</p></div>}
-      </GlassCard>
+      )}
+
+      {/* Desktop Table */}
+      {!isLoading && filtered.length > 0 && (
+        <div className="hidden sm:block">
+          <GlassCard className="overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[rgba(100,116,139,0.1)]">
+                  <th className="text-left text-xs font-medium text-[#94A3B8] uppercase px-4 py-3">
+                    Project
+                  </th>
+                  <th className="text-left text-xs font-medium text-[#94A3B8] uppercase px-4 py-3">
+                    Status
+                  </th>
+                  <th className="text-left text-xs font-medium text-[#94A3B8] uppercase px-4 py-3">
+                    Signal
+                  </th>
+                  <th className="text-left text-xs font-medium text-[#94A3B8] uppercase px-4 py-3">
+                    Created
+                  </th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((project) => (
+                  <tr
+                    key={project.id}
+                    className="border-b border-[rgba(100,116,139,0.05)] hover:bg-[rgba(15,23,42,0.4)] transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-sm text-[#F8FAFC]">
+                        {project.name}
+                      </div>
+                      <div className="text-xs text-[#64748B] truncate max-w-[200px]">
+                        {project.description}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={project.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <SignalDots strength={project.signalStrength} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#64748B]">
+                      {new Date(project.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/projects/${project.id}/case`}
+                        className="p-1.5 text-[#94A3B8] hover:text-[#3B82F6] rounded-lg hover:bg-[rgba(59,130,246,0.1)] transition-all"
+                      >
+                        <ChevronRight size={16} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* Mobile Cards */}
+      <div className="sm:hidden space-y-3">
+        {filtered.map((project) => (
+          <Link
+            key={project.id}
+            to={`/projects/${project.id}/case`}
+            className="block glass-card p-4 hover:border-[rgba(59,130,246,0.3)] transition-all"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-medium text-sm text-[#F8FAFC]">
+                {project.name}
+              </h3>
+              <StatusBadge status={project.status} />
+            </div>
+            <p className="text-xs text-[#94A3B8] mb-2 line-clamp-2">
+              {project.description}
+            </p>
+            <div className="flex items-center justify-between">
+              <SignalDots strength={project.signalStrength} />
+              <span className="text-xs text-[#64748B]">
+                {new Date(project.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Empty state */}
+      {!isLoading && filtered.length === 0 && (
+        <div className="text-center py-12">
+          <FolderKanban size={32} className="text-[#334155] mx-auto mb-3" />
+          <p className="text-sm text-[#94A3B8]">No projects found</p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="mt-3 text-sm text-[#3B82F6] hover:underline"
+          >
+            Create your first project
+          </button>
+        </div>
+      )}
+
+      {/* Create modal */}
+      <CreateProjectModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
-  )
+  );
 }

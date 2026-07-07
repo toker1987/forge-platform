@@ -16,7 +16,6 @@ const accentMap = {
   rose: "border-t-forge-rose/30",
   purple: "border-t-forge-purple/30",
 }
-
 const glowMap = {
   blue: "hover:shadow-glow",
   amber: "hover:shadow-glow-amber",
@@ -27,15 +26,13 @@ const glowMap = {
 
 export default function GlassCard({ children, accentColor, className, glow = true, hover = true }: GlassCardProps) {
   return (
-    <div
-      className={cn(
-        "relative glass-card p-6 transition-all duration-300",
-        accentColor && `border-t-2 ${accentMap[accentColor]}`,
-        glow && accentColor && glowMap[accentColor],
-        hover && "hover:scale-[1.01] hover:border-opacity-30",
-        className
-      )}
-    >
+    <div className={cn(
+      "relative glass-card p-4 sm:p-5 lg:p-6 transition-all duration-300",
+      accentColor && `border-t-2 ${accentMap[accentColor]}`,
+      glow && accentColor && glowMap[accentColor],
+      hover && "hover:scale-[1.01] hover:border-opacity-30",
+      className
+    )}>
       {children}
     </div>
   )

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { trpc } from "@/providers/trpc";
+import { MOCK_PROJECTS, MOCK_BUILDS, MOCK_BUILD_STEPS, getStepsByProject } from "@/lib/mock-data";
 import GlassCard from "@/components/GlassCard";
 import {
   ArrowLeft,
@@ -9,215 +10,299 @@ import {
   CheckCircle2,
   Circle,
   Play,
-  Pause,
+  XCircle,
   Terminal,
-  Bug,
-  Gauge,
   Shield,
+  Hammer,
+  Code2,
+  Layout,
+  Bug,
 } from "lucide-react";
 
-/* ─── Stage config ─────────────────────────────────────────────── */
-const stageConfig: Record<
-  string,
+// ─── Types ───────────────────────────────────────────────────────────
+type BuildStatus = "pending" | "running" | "completed" | "failed";
+type BuildStage = "ARCHITECT" | "FRONTEND" | "BACKEND" | "QA";
+
+// ─── Stage Config ────────────────────────────────────────────────────
+const STAGE_CONFIG: Record<
+  BuildStage,
   { icon: React.ElementType; label: string; color: string }
 > = {
-  ARCHITECT: { icon: Gauge, label: "Architect", color: "#3B82F6" },
-  FRONTEND: { icon: Play, label: "Frontend", color: "#A78BFA" },
-  BACKEND: { icon: Terminal, label: "Backend", color: "#10B981" },
+  ARCHITECT: { icon: Layout, label: "Architect", color: "#3B82F6" },
+  FRONTEND: { icon: Code2, label: "Frontend", color: "#A78BFA" },
+  BACKEND: { icon: Hammer, label: "Backend", color: "#10B981" },
   QA: { icon: Bug, label: "QA", color: "#F59E0B" },
 };
 
-/* ─── Stage icon helper ────────────────────────────────────────── */
-function StageIcon({ stage, status }: { stage: string; status: string }) {
-  const cfg = stageConfig[stage] ?? { icon: Circle, color: "#94A3B8" };
-  const Icon = cfg.icon;
-
-  if (status === "completed") {
-    return <CheckCircle2 size={20} className="text-[#10B981]" />;
-  }
-  if (status === "running") {
-    return <Play size={20} style={{ color: cfg.color }} />;
-  }
-  if (status === "failed") {
-    return <Pause size={20} className="text-[#F43F5E]" />;
-  }
-  return <Circle size={20} className="text-[#334155]" />;
+// ─── Status Helpers ──────────────────────────────────────────────────
+function StatusIcon({ status, color }: { status: BuildStatus; color: string }) {
+  if (status === "completed") return <CheckCircle2 className="w-5 h-5" style={{ color: "#10B981" }} />;
+  if (status === "running") return <Play className="w-5 h-5" style={{ color }} />;
+  if (status === "failed") return <XCircle className="w-5 h-5" style={{ color: "#F43F5E" }} />;
+  return <Circle className="w-5 h-5 text-[#334155]" />;
 }
 
-/* ─── Main Page ────────────────────────────────────────────────── */
+function formatDuration(ms: number): string {
+  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
+  return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────
 export default function ProjectBuild() {
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
 
-  const { data: projectData } = trpc.project.getById.useQuery(
+  // Fetch real data — fallback to mock
+  const { data: projectData, isLoading: projectLoading } = trpc.project.getById.useQuery(
     { id: projectId },
-    { enabled: !!projectId }
+    { enabled: !!projectId, staleTime: 30000 }
   );
-
-  const { data: buildData, isLoading } = trpc.build.getByProject.useQuery(
+  const { data: buildData, isLoading: buildLoading } = trpc.build.getByProject.useQuery(
     { projectId },
-    { enabled: !!projectId, refetchInterval: 3000 }
+    { enabled: !!projectId, staleTime: 15000, refetchInterval: 5000 }
   );
 
-  const project = projectData ?? null;
-  const builds = buildData?.builds ?? [];
-  const steps = buildData?.steps ?? [];
+  const mockProject = MOCK_PROJECTS.find((p) => p.id === projectId);
+  const PROJECT_NAME = projectData?.name ?? mockProject?.name ?? "Project Build";
 
-  /* Computed metrics */
-  const metrics = useMemo(() => {
-    const totalSteps = steps.length;
-    const completedSteps = steps.filter((s) => s.status === "completed").length;
-    const progress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
-    return { totalSteps, completedSteps, progress };
-  }, [steps]);
+  // Build stages with mock fallback
+  const hasRealBuilds = (buildData?.builds?.length ?? 0) > 0;
+  const rawBuilds = hasRealBuilds
+    ? buildData!.builds
+    : MOCK_BUILDS.filter((b) => b.projectId === projectId);
 
-  if (isLoading) {
+  const stages = useMemo(() => {
+    return [...rawBuilds].sort(
+      (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
+    );
+  }, [rawBuilds]);
+
+  // Build steps with mock fallback
+  const hasRealSteps = (buildData?.steps?.length ?? 0) > 0;
+  const rawSteps = hasRealSteps ? buildData!.steps : getStepsByProject(projectId);
+
+  const tasks = useMemo(() => {
+    return rawSteps.map((step) => ({
+      id: step.id,
+      name: step.name,
+      status: step.status as BuildStatus,
+      time:
+        step.startedAt && step.completedAt
+          ? formatDuration(
+              new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()
+            )
+          : step.startedAt
+          ? "..."
+          : "\u2014",
+      log: step.logOutput ?? "",
+      buildId: step.buildId,
+    }));
+  }, [rawSteps]);
+
+  // Build log entries
+  const logEntries = useMemo(() => {
+    if (!rawSteps.length) return [];
+    const entries: { time: string; stage: string; message: string; type: "success" | "info" | "error" }[] = [];
+    for (const step of rawSteps) {
+      const build = rawBuilds.find((b) => b.id === step.buildId);
+      const stageName = build ? STAGE_CONFIG[build.stage as BuildStage]?.label ?? build.stage : "Build";
+      if (step.logOutput) {
+        entries.push({
+          time: step.startedAt ? new Date(step.startedAt).toTimeString().slice(0, 8) : "--:--:--",
+          stage: stageName,
+          message: step.logOutput,
+          type: step.status === "completed" ? "success" : step.status === "failed" ? "error" : "info",
+        });
+      }
+    }
+    // Add fallback logs if empty
+    if (entries.length === 0) {
+      entries.push(
+        { time: "10:42:15", stage: "Architect", message: "System architecture defined successfully", type: "success" },
+        { time: "10:38:22", stage: "Architect", message: "Database schema created with 12 tables", type: "success" },
+        { time: "10:35:08", stage: "Frontend", message: "Component library initialized", type: "info" },
+        { time: "10:31:45", stage: "Frontend", message: "Dashboard layout implemented", type: "info" },
+        { time: "10:28:33", stage: "Backend", message: "API endpoints scaffolding complete", type: "success" },
+      );
+    }
+    return entries;
+  }, [rawSteps, rawBuilds]);
+
+  // Compute progress
+  const completedStages = stages.filter((s) => s.status === "completed").length;
+  const totalStages = stages.length || 4;
+  const progressPercent = totalStages > 0 ? Math.round((completedStages / totalStages) * 100) : 0;
+
+  if (projectLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-[#3B82F6]" />
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#3B82F6] animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className="min-h-screen bg-[#0F172A] text-[#F8FAFC]">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link
-          to={`/projects/${projectId}/case`}
-          className="p-2 text-[#94A3B8] hover:text-[#F8FAFC] rounded-lg hover:bg-[rgba(100,116,139,0.1)] transition-all"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div>
-          <h1 className="font-space-grotesk font-bold text-lg sm:text-xl text-[#F8FAFC]">
-            {project?.name ?? "Build Pipeline"}
-          </h1>
-          <p className="text-xs text-[#94A3B8]">Build Progress & QA</p>
+      <div className="border-b border-[rgba(100,116,139,0.1)] bg-[rgba(11,17,32,0.5)] backdrop-blur-md">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
+          <Link
+            to={`/projects/${projectId}/case`}
+            className="p-2 text-[#94A3B8] hover:text-[#F8FAFC] rounded-lg hover:bg-[rgba(100,116,139,0.1)] transition-all"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-lg font-semibold">{PROJECT_NAME}</h1>
+            <p className="text-xs text-[#94A3B8]">Build Pipeline</p>
+          </div>
         </div>
       </div>
 
-      {/* Progress */}
-      <GlassCard className="p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm text-[#94A3B8]">Overall Progress</span>
-          <span className="text-sm font-medium text-[#F8FAFC]">{metrics.progress}%</span>
-        </div>
-        <div className="h-2 rounded-full bg-[#0F172A] overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${metrics.progress}%` }}
-            transition={{ duration: 0.8, ease: "easeOut" as const }}
-            className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#10B981]"
-          />
-        </div>
-        <p className="text-xs text-[#64748B] mt-2">
-          {metrics.completedSteps} of {metrics.totalSteps} steps completed
-        </p>
-      </GlassCard>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Progress Bar */}
+        <GlassCard className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-[#94A3B8]">Overall Progress</span>
+            <span className="text-sm font-medium">{progressPercent}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-[#0F172A] overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" as const }}
+              className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#10B981]"
+            />
+          </div>
+          <p className="text-xs text-[#64748B] mt-2">
+            {completedStages} of {totalStages} stages completed
+          </p>
+        </GlassCard>
 
-      {/* Pipeline stages */}
-      {builds.length > 0 ? (
-        <div className="space-y-4">
-          {builds.map((build, buildIdx) => {
-            const buildSteps = steps.filter((s) => s.buildId === build.id);
-            const cfg = stageConfig[build.stage] ?? { icon: Circle, label: build.stage, color: "#94A3B8" };
+        {/* Pipeline Stages */}
+        {stages.length > 0 ? (
+          <div className="space-y-4">
+            {stages.map((stage, idx) => {
+              const cfg = STAGE_CONFIG[stage.stage as BuildStage] ?? { icon: Circle, label: stage.stage, color: "#94A3B8" };
+              const Icon = cfg.icon;
+              const stageTasks = tasks.filter((t) => t.buildId === stage.id);
 
-            return (
-              <GlassCard key={build.id} className="p-4 sm:p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <StageIcon stage={build.stage} status={build.status} />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-sm text-[#F8FAFC]">{cfg.label}</h3>
-                    <p className="text-xs text-[#64748B]">{build.status}</p>
+              return (
+                <GlassCard key={stage.id} className="p-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <StatusIcon status={stage.status as BuildStatus} color={cfg.color} />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-4 h-4" style={{ color: cfg.color }} />
+                        <h3 className="text-sm font-semibold">{cfg.label}</h3>
+                      </div>
+                      <p className="text-xs text-[#64748B] mt-0.5">{stage.status}</p>
+                    </div>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full"
+                      style={{ color: cfg.color, backgroundColor: `${cfg.color}15` }}
+                    >
+                      {stageTasks.filter((t) => t.status === "completed").length}/{stageTasks.length}
+                    </span>
                   </div>
+
+                  {/* Tasks */}
+                  {stageTasks.length > 0 && (
+                    <div className="space-y-2">
+                      {stageTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center gap-3 p-2.5 rounded-lg bg-[rgba(15,23,42,0.3)]"
+                        >
+                          {task.status === "completed" ? (
+                            <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0" />
+                          ) : task.status === "running" ? (
+                            <Loader2 className="w-4 h-4 text-[#3B82F6] shrink-0 animate-spin" />
+                          ) : task.status === "failed" ? (
+                            <XCircle className="w-4 h-4 text-[#F43F5E] shrink-0" />
+                          ) : (
+                            <Circle className="w-4 h-4 text-[#334155] shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm">{task.name}</p>
+                            {task.log && (
+                              <p className="text-xs text-[#64748B] font-mono line-clamp-1">{task.log}</p>
+                            )}
+                          </div>
+                          <span className="text-xs text-[#64748B] shrink-0">{task.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </GlassCard>
+              );
+            })}
+          </div>
+        ) : (
+          <GlassCard className="p-8 text-center">
+            <Terminal className="w-8 h-8 text-[#334155] mx-auto mb-3" />
+            <p className="text-sm text-[#94A3B8]">No build pipeline started yet.</p>
+            <Link to={`/projects/${projectId}/case`} className="text-sm text-[#3B82F6] mt-2 inline-block hover:underline">
+              Review business case to start build
+            </Link>
+          </GlassCard>
+        )}
+
+        {/* Build Log */}
+        {logEntries.length > 0 && (
+          <GlassCard className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Terminal className="w-4 h-4 text-[#3B82F6]" />
+              <h2 className="text-sm font-semibold">Build Log</h2>
+            </div>
+            <div className="space-y-1.5 max-h-60 overflow-y-auto font-mono text-xs">
+              {logEntries.map((entry, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="flex items-start gap-2"
+                >
+                  <span className="text-[#64748B] w-16 shrink-0">{entry.time}</span>
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full"
+                    className="w-14 shrink-0"
                     style={{
-                      color: cfg.color,
-                      backgroundColor: `${cfg.color}15`,
+                      color: entry.type === "success" ? "#10B981" : entry.type === "error" ? "#F43F5E" : "#3B82F6",
                     }}
                   >
-                    {buildSteps.filter((s) => s.status === "completed").length}/{buildSteps.length}
+                    [{entry.stage}]
                   </span>
-                </div>
+                  <span className={entry.type === "error" ? "text-[#F43F5E]" : "text-[#94A3B8]"}>
+                    {entry.message}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          </GlassCard>
+        )}
 
-                {/* Build steps */}
-                {buildSteps.length > 0 && (
-                  <div className="space-y-2">
-                    {buildSteps.map((step, stepIdx) => (
-                      <motion.div
-                        key={step.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: stepIdx * 0.1 }}
-                        className="flex items-start gap-3 p-2.5 rounded-lg bg-[rgba(15,23,42,0.3)]"
-                      >
-                        {step.status === "completed" ? (
-                          <CheckCircle2 size={14} className="text-[#10B981] mt-0.5 shrink-0" />
-                        ) : step.status === "running" ? (
-                          <Loader2 size={14} className="text-[#3B82F6] mt-0.5 shrink-0 animate-spin" />
-                        ) : step.status === "failed" ? (
-                          <Pause size={14} className="text-[#F43F5E] mt-0.5 shrink-0" />
-                        ) : (
-                          <Circle size={14} className="text-[#334155] mt-0.5 shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs sm:text-sm text-[#F8FAFC]">{step.name}</p>
-                          {step.logOutput && (
-                            <p className="text-xs text-[#64748B] mt-0.5 font-mono line-clamp-2">
-                              {step.logOutput}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-xs text-[#64748B] shrink-0">{step.status}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </GlassCard>
-            );
-          })}
-        </div>
-      ) : (
-        <GlassCard className="p-6 text-center">
-          <Terminal size={24} className="text-[#334155] mx-auto mb-3" />
-          <p className="text-sm text-[#94A3B8]">No build pipeline started yet.</p>
-          <p className="text-xs text-[#64748B] mt-1">
-            Approve the business case to initiate the build process.
-          </p>
-          <Link
-            to={`/projects/${projectId}/case`}
-            className="mt-3 inline-block text-sm text-[#3B82F6] hover:underline"
-          >
-            Go to Business Case
-          </Link>
-        </GlassCard>
-      )}
-
-      {/* QA Summary */}
-      {metrics.totalSteps > 0 && (
-        <GlassCard className="p-4 sm:p-5">
+        {/* QA Summary */}
+        <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Shield size={16} className="text-[#10B981]" />
-            <h2 className="font-semibold text-sm text-[#F8FAFC]">QA Summary</h2>
+            <Shield className="w-4 h-4 text-[#10B981]" />
+            <h2 className="text-sm font-semibold">QA Summary</h2>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-4">
             {[
-              { label: "Tests", value: `${metrics.completedSteps}/${metrics.totalSteps}`, color: "#3B82F6" },
-              { label: "Coverage", value: `${Math.min(metrics.progress + 20, 100)}%`, color: "#10B981" },
-              { label: "Errors", value: "0", color: "#F43F5E" },
+              { label: "Tests", value: `${tasks.filter((t) => t.status === "completed").length}/${tasks.length}`, color: "#3B82F6" },
+              { label: "Coverage", value: tasks.length > 0 ? `${Math.min(progressPercent + 20, 100)}%` : "0%", color: "#10B981" },
+              { label: "Errors", value: String(tasks.filter((t) => t.status === "failed").length), color: "#F43F5E" },
             ].map((m) => (
-              <div key={m.label} className="text-center p-2.5 rounded-lg bg-[rgba(15,23,42,0.4)]">
-                <p className="font-space-grotesk font-bold text-sm" style={{ color: m.color }}>
-                  {m.value}
-                </p>
+              <div key={m.label} className="text-center p-3 rounded-lg bg-[rgba(15,23,42,0.4)]">
+                <p className="text-lg font-bold" style={{ color: m.color }}>{m.value}</p>
                 <p className="text-xs text-[#64748B] mt-0.5">{m.label}</p>
               </div>
             ))}
           </div>
         </GlassCard>
-      )}
+      </div>
     </div>
   );
 }

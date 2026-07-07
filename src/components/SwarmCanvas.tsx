@@ -1,127 +1,104 @@
-import { useRef, useEffect, useCallback } from "react";
+/**
+ * FORGE Background — Animated Gradient Mesh
+ * Replaces the old particle system with a smooth, premium animated gradient.
+ */
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-}
+import { useEffect, useRef } from "react"
 
 export default function SwarmCanvas() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Particle[]>([]);
-  const mouseRef = useRef({ x: -1000, y: -1000 });
-  const animRef = useRef<number>(0);
-
-  const initParticles = useCallback((width: number, height: number) => {
-    const particles: Particle[] = [];
-    for (let i = 0; i < 50; i++) {
-      particles.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 1.5,
-        vy: (Math.random() - 0.5) * 1.5,
-        radius: Math.random() * 2 + 1,
-      });
-    }
-    particlesRef.current = particles;
-  }, []);
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    let w = 0, h = 0, animId = 0
+    let t = 0
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      initParticles(canvas.width, canvas.height);
-    };
+      w = canvas.width = window.innerWidth
+      h = canvas.height = window.innerHeight
+    }
+    resize()
+    window.addEventListener("resize", resize)
 
-    resize();
-    window.addEventListener("resize", resize);
+    // Soft color palette (deep navy, subtle blue, purple, teal)
+    const colors = [
+      [8, 12, 24],      // deep navy
+      [15, 25, 50],     // navy blue
+      [20, 35, 70],     // blue
+      [25, 20, 55],     // deep purple
+      [10, 30, 40],     // teal tint
+    ]
 
-    const handleMouse = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
-    };
-    window.addEventListener("mousemove", handleMouse);
+    const blobs = [
+      { x: 0.3, y: 0.3, r: 0.4, cx: colors[1], speed: 0.0003 },
+      { x: 0.7, y: 0.5, r: 0.35, cx: colors[2], speed: 0.00025 },
+      { x: 0.5, y: 0.7, r: 0.3, cx: colors[3], speed: 0.00035 },
+      { x: 0.2, y: 0.8, r: 0.25, cx: colors[4], speed: 0.0002 },
+    ]
 
-    const animate = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
+    const draw = () => {
+      t += 1
 
-      const particles = particlesRef.current;
-      const mouse = mouseRef.current;
+      // Base dark background
+      ctx.fillStyle = "#060a12"
+      ctx.fillRect(0, 0, w, h)
 
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
+      // Draw each blob
+      for (const b of blobs) {
+        const bx = (b.x + Math.sin(t * b.speed) * 0.1) * w
+        const by = (b.y + Math.cos(t * b.speed * 0.7) * 0.08) * h
+        const br = b.r * Math.min(w, h)
 
-        // Mouse repulsion
-        const dx = p.x - mouse.x;
-        const dy = p.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 150) {
-          const force = (150 - dist) / 150;
-          p.vx += (dx / dist) * force * 0.5;
-          p.vy += (dy / dist) * force * 0.5;
-        }
+        const grad = ctx.createRadialGradient(bx, by, 0, bx, by, br)
+        grad.addColorStop(0, `rgba(${b.cx[0]}, ${b.cx[1]}, ${b.cx[2]}, 0.5)`)
+        grad.addColorStop(0.5, `rgba(${b.cx[0]}, ${b.cx[1]}, ${b.cx[2]}, 0.15)`)
+        grad.addColorStop(1, "rgba(6, 10, 18, 0)")
 
-        // Update position
-        p.x += p.vx;
-        p.y += p.vy;
-
-        // Damping
-        p.vx *= 0.99;
-        p.vy *= 0.99;
-
-        // Bounce off edges
-        if (p.x < 0 || p.x > w) p.vx *= -1;
-        if (p.y < 0 || p.y > h) p.vy *= -1;
-        p.x = Math.max(0, Math.min(w, p.x));
-        p.y = Math.max(0, Math.min(h, p.y));
-
-        // Draw particle
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(59, 130, 246, 0.6)";
-        ctx.fill();
-
-        // Draw connections
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const d = Math.sqrt((p.x - p2.x) ** 2 + (p.y - p2.y) ** 2);
-          if (d < 120) {
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(59, 130, 246, ${0.15 * (1 - d / 120)})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
+        ctx.fillStyle = grad
+        ctx.fillRect(0, 0, w, h)
       }
 
-      animRef.current = requestAnimationFrame(animate);
-    };
+      // Subtle grid overlay
+      ctx.strokeStyle = "rgba(100, 130, 180, 0.02)"
+      ctx.lineWidth = 1
+      const gridSize = 60
+      for (let x = 0; x < w; x += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, h)
+        ctx.stroke()
+      }
+      for (let y = 0; y < h; y += gridSize) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(w, y)
+        ctx.stroke()
+      }
 
-    animate();
+      animId = requestAnimationFrame(draw)
+    }
 
+    draw()
     return () => {
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", handleMouse);
-      cancelAnimationFrame(animRef.current);
-    };
-  }, [initParticles]);
+      window.removeEventListener("resize", resize)
+      cancelAnimationFrame(animId)
+    }
+  }, [])
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ zIndex: 0 }}
+      style={{
+        position: "absolute",
+        top: 0, left: 0,
+        width: "100%",
+        height: "100%",
+        zIndex: 0,
+      }}
     />
-  );
+  )
 }

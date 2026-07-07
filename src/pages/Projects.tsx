@@ -1,161 +1,72 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react"
+import { Link } from "react-router-dom"
+import { motion, AnimatePresence } from "framer-motion"
+import { trpc } from "@/providers/trpc"
+import { MOCK_PROJECTS } from "@/lib/mock-data"
 import {
-  Plus,
-  Search,
-  Eye,
-  Pencil,
-  MoreVertical,
-  FolderOpen,
-  X,
-  Loader2,
-} from "lucide-react";
-import GlassCard from "../components/GlassCard";
-import { Link } from "react-router-dom";
-import { trpc } from "@/providers/trpc";
-import { MOCK_PROJECTS } from "@/lib/mock-data";
+  Search, Plus, X, Loader2, FolderOpen,
+  ChevronRight, Filter,
+} from "lucide-react"
 
-// ─── Types ───────────────────────────────────────────────────────────
-type ProjectStatus =
-  | "IDEA_SCOUTED"
-  | "CASE_BUILT"
-  | "IN_BUILD"
-  | "QA_REVIEW"
-  | "LIVE"
-  | "REJECTED";
+/* ─── Status Config ─────────────────────────────────────────────── */
+const STATUS_CFG: Record<string, { label: string; color: string }> = {
+  IDEA_SCOUTED: { label: "Idea", color: "#F59E0B" },
+  CASE_BUILT: { label: "Case", color: "#3B82F6" },
+  IN_BUILD: { label: "Build", color: "#8B5CF6" },
+  QA_REVIEW: { label: "QA", color: "#F59E0B" },
+  LIVE: { label: "Live", color: "#10B981" },
+  REJECTED: { label: "Dead", color: "#F43F5E" },
+}
 
-type SignalStrength = "Strong" | "Medium" | "Weak";
-
-// ─── Status Config ───────────────────────────────────────────────────
-const STATUS_CONFIG: Record<
-  ProjectStatus,
-  { label: string; color: string; bg: string; border: string; pulse?: boolean }
-> = {
-  IDEA_SCOUTED: {
-    label: "Idea Scouted",
-    color: "text-[#F59E0B]",
-    bg: "bg-[rgba(245,158,11,0.1)]",
-    border: "border-[#F59E0B]",
-    pulse: true,
-  },
-  CASE_BUILT: {
-    label: "Case Built",
-    color: "text-[#3B82F6]",
-    bg: "bg-[rgba(59,130,246,0.1)]",
-    border: "border-[#3B82F6]",
-  },
-  IN_BUILD: {
-    label: "In Build",
-    color: "text-[#A78BFA]",
-    bg: "bg-[rgba(167,139,250,0.1)]",
-    border: "border-[#A78BFA]",
-    pulse: true,
-  },
-  QA_REVIEW: {
-    label: "QA Review",
-    color: "text-[#F59E0B]",
-    bg: "bg-[rgba(245,158,11,0.1)]",
-    border: "border-[#F59E0B]",
-    pulse: true,
-  },
-  LIVE: {
-    label: "Live",
-    color: "text-[#10B981]",
-    bg: "bg-[rgba(16,185,129,0.1)]",
-    border: "border-[#10B981]",
-  },
-  REJECTED: {
-    label: "Rejected",
-    color: "text-[#F43F5E]",
-    bg: "bg-[rgba(244,63,94,0.1)]",
-    border: "border-[#F43F5E]",
-  },
-};
-
-const SIGNAL_CONFIG: Record<SignalStrength, string> = {
-  Strong: "bg-[#10B981]",
-  Medium: "bg-[#F59E0B]",
-  Weak: "bg-[#F43F5E]",
-};
-
-const STAGE_MAP: Record<ProjectStatus, string> = {
-  IDEA_SCOUTED: "Research",
-  CASE_BUILT: "Analysis Complete",
-  IN_BUILD: "Building",
-  QA_REVIEW: "Testing",
-  LIVE: "Deployed",
-  REJECTED: "Rejected",
-};
-
-// ─── Status Badge Component ──────────────────────────────────────────
-function StatusBadge({ status }: { status: ProjectStatus }) {
-  const cfg = STATUS_CONFIG[status];
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CFG[status] || { label: status, color: "#64748B" }
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium border ${cfg.color} ${cfg.bg} ${cfg.border} ${
-        cfg.pulse ? "animate-pulse" : ""
-      }`}
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+      style={{ color: cfg.color, backgroundColor: `${cfg.color}18` }}
     >
       {cfg.label}
     </span>
-  );
+  )
 }
 
-// ─── Signal Dots ─────────────────────────────────────────────────────
-function SignalDots({ strength }: { strength: SignalStrength }) {
-  const count = strength === "Strong" ? 3 : strength === "Medium" ? 2 : 1;
+function SignalDots({ strength }: { strength: string }) {
+  const n = strength === "Strong" ? 3 : strength === "Medium" ? 2 : 1
   return (
     <div className="flex items-center gap-1">
-      {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className={`w-2 h-2 rounded-full ${
-            i < count ? SIGNAL_CONFIG[strength] : "bg-[#334155]"
-          }`}
-        />
+      {[0, 1, 2].map(i => (
+        <span key={i} className={`w-1 h-1 rounded-full ${i < n ? "bg-[#3B82F6]" : "bg-[#1e293b]"}`} />
       ))}
-      <span className="ml-1.5 text-xs text-[#94A3B8]">{strength}</span>
+      <span className="text-[10px] text-[#475569] ml-1">{strength}</span>
     </div>
-  );
+  )
 }
 
-// ─── Animation Helpers ───────────────────────────────────────────────
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.04 } },
-};
+function timeAgo(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date
+  const s = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (s < 60) return "now"
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  return `${Math.floor(h / 24)}d`
+}
 
-const rowVariant = {
-  hidden: { opacity: 0, y: 10 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" as const } },
-};
+/* ─── Create Modal ──────────────────────────────────────────────── */
+function CreateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const utils = trpc.useUtils()
+  const [name, setName] = useState("")
+  const [desc, setDesc] = useState("")
 
-// ─── Create Project Modal ────────────────────────────────────────────
-function CreateProjectModal({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const utils = trpc.useUtils();
-
-  const createMutation = trpc.project.create.useMutation({
+  const create = trpc.project.create.useMutation({
     onSuccess: () => {
-      utils.project.list.invalidate();
-      setName("");
-      setDescription("");
-      onClose();
+      utils.project.list.invalidate()
+      setName("")
+      setDesc("")
+      onClose()
     },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    createMutation.mutate({ name: name.trim(), description: description.trim() || undefined });
-  };
+  })
 
   return (
     <AnimatePresence>
@@ -164,311 +75,162 @@ function CreateProjectModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2, ease: "easeOut" as const }}
-            className="bg-[#0B1120] border border-[rgba(100,116,139,0.2)] rounded-xl p-6 w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-[#0c111b] border border-white/[0.08] rounded-xl p-6 w-full max-w-md"
+            onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[#F8FAFC]">New Project</h2>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-semibold text-white">New Project</h3>
+              <button onClick={onClose} className="p-1 text-[#475569] hover:text-white"><X size={16} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] text-[#475569] mb-1.5">Project Name</label>
+                <input
+                  type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="e.g. AI Code Review Agent"
+                  className="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-white placeholder-[#334155] focus:border-[#3B82F6]/50 focus:outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-[#475569] mb-1.5">Description</label>
+                <textarea
+                  value={desc} onChange={e => setDesc(e.target.value)}
+                  placeholder="Brief description..."
+                  rows={3}
+                  className="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-white placeholder-[#334155] focus:border-[#3B82F6]/50 focus:outline-none transition-colors resize-none"
+                />
+              </div>
               <button
-                onClick={onClose}
-                className="p-1 text-[#64748B] hover:text-[#F8FAFC] transition-colors"
+                onClick={() => name.trim() && create.mutate({ name: name.trim(), description: desc.trim() || undefined })}
+                disabled={!name.trim() || create.isPending}
+                className="w-full flex items-center justify-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 text-white text-[13px] font-medium py-2.5 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5" />
+                {create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                Create Project
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#94A3B8] font-medium mb-1.5">
-                  Project Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. AI Code Review Agent"
-                  required
-                  className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-4 py-2.5 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-[#94A3B8] font-medium mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of the project..."
-                  rows={3}
-                  className="w-full bg-[#0F172A] border border-[#334155] rounded-lg px-4 py-2.5 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all resize-none"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending || !name.trim()}
-                  className="flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-all"
-                >
-                  {createMutation.isPending && (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  )}
-                  Create Project
-                </button>
-              </div>
-            </form>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
-  );
+  )
 }
 
-// ─── Loading Skeleton ────────────────────────────────────────────────
-function SkeletonRow() {
-  return (
-    <div className="grid grid-cols-12 gap-4 px-6 py-4 items-center animate-pulse">
-      <div className="col-span-4">
-        <div className="h-4 bg-[#334155] rounded w-3/4" />
-        <div className="h-3 bg-[#334155] rounded w-1/2 mt-2" />
-      </div>
-      <div className="col-span-2">
-        <div className="h-5 bg-[#334155] rounded w-20" />
-      </div>
-      <div className="col-span-2">
-        <div className="h-4 bg-[#334155] rounded w-16" />
-      </div>
-      <div className="col-span-2">
-        <div className="h-4 bg-[#334155] rounded w-20" />
-      </div>
-      <div className="col-span-2">
-        <div className="h-4 bg-[#334155] rounded w-12 ml-auto" />
-      </div>
-    </div>
-  );
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────
-function formatTimeAgo(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const mins = Math.floor(seconds / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-// ─── Main Page ───────────────────────────────────────────────────────
+/* ─── MAIN PAGE ─────────────────────────────────────────────────── */
 export default function Projects() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [sortBy, setSortBy] = useState<string>("updated");
-  const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("ALL")
+  const [showCreate, setShowCreate] = useState(false)
 
-  // Fetch real projects — fallback to mock data when API unavailable
-  const { data, isLoading } = trpc.project.list.useQuery(undefined, {
-    staleTime: 30000,
-  });
+  const { data, isLoading } = trpc.project.list.useQuery(undefined, { staleTime: Infinity })
+  const rawProjects = data?.projects?.length ? data.projects : MOCK_PROJECTS
 
-  const rawProjects = data?.projects?.length ? data.projects : MOCK_PROJECTS;
-  const projects = rawProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description ?? "",
-    status: p.status as ProjectStatus,
-    signal: (p.signalStrength ?? "Medium") as SignalStrength,
-    stage: STAGE_MAP[p.status as ProjectStatus] ?? p.status,
-    tenant: "Internal",
-    started: formatTimeAgo(p.createdAt),
-  }));
-
-  const statusOptions = [
-    { value: "ALL", label: "All Statuses" },
-    { value: "IDEA_SCOUTED", label: "Idea Scouted" },
-    { value: "CASE_BUILT", label: "Case Built" },
-    { value: "IN_BUILD", label: "In Build" },
-    { value: "QA_REVIEW", label: "QA Review" },
-    { value: "LIVE", label: "Live" },
-    { value: "REJECTED", label: "Rejected" },
-  ];
-
-  const filtered = projects
-    .filter((p) => {
-      const matchesSearch =
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.description.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "ALL" || p.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "status") return a.status.localeCompare(b.status);
-      return 0;
-    });
+  const filtered = rawProjects.filter(p => {
+    const q = search.toLowerCase()
+    const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q)
+    const matchStatus = statusFilter === "ALL" || p.status === statusFilter
+    return matchSearch && matchStatus
+  })
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-[#F8FAFC]">
-      {/* Top Bar */}
-      <div className="border-b border-[rgba(100,116,139,0.1)] bg-[rgba(11,17,32,0.5)] backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-            <span className="font-medium">Projects</span>
-            <span className="text-[#64748B]">/</span>
-            <span className="text-[#64748B]">All Projects</span>
-          </div>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg px-4 py-2 text-sm font-medium transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            New Project
-          </button>
+    <div className="space-y-5 max-w-6xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white tracking-tight">Projects</h1>
+          <p className="text-[12px] text-[#475569] mt-0.5">{rawProjects.length} projects total</p>
         </div>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[12px] font-medium px-4 py-2 rounded-lg transition-colors"
+        >
+          <Plus size={14} /> New Project
+        </button>
       </div>
 
       {/* Filters */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search projects..."
-              className="w-full bg-[#0F172A] border border-[#334155] rounded-lg pl-9 pr-4 py-2.5 text-sm text-[#F8FAFC] placeholder-[#64748B] focus:border-[#3B82F6] focus:ring-2 focus:ring-[rgba(59,130,246,0.2)] outline-none transition-all"
-            />
-          </div>
-          <div className="flex gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#F8FAFC] outline-none"
-            >
-              {statusOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="bg-[#0F172A] border border-[#334155] rounded-lg px-3 py-2.5 text-sm text-[#F8FAFC] outline-none"
-            >
-              <option value="updated">Last Updated</option>
-              <option value="name">Name</option>
-              <option value="status">Status</option>
-            </select>
-          </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#334155]" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search projects..."
+            className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg pl-9 pr-3 py-2 text-[13px] text-white placeholder-[#334155] focus:border-[#3B82F6]/50 focus:outline-none transition-colors"
+          />
         </div>
-
-        {/* Project Table */}
-        <GlassCard className="mt-6 overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-[rgba(100,116,139,0.1)] text-xs font-medium text-[#64748B] uppercase tracking-wider">
-            <div className="col-span-4">Project</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2">Signal</div>
-            <div className="col-span-2">Stage</div>
-            <div className="col-span-2 text-right">Actions</div>
-          </div>
-
-          {/* Loading */}
-          {isLoading && (
-            <>
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-              <SkeletonRow />
-            </>
-          )}
-
-          {/* Rows */}
-          {!isLoading && (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-            >
-              {filtered.map((project) => (
-                <motion.div
-                  key={project.id}
-                  variants={rowVariant}
-                  className="grid grid-cols-12 gap-4 px-6 py-4 items-center border-b border-[rgba(100,116,139,0.05)] hover:bg-[rgba(100,116,139,0.03)] transition-colors"
-                >
-                  <div className="col-span-4">
-                    <Link
-                      to={`/projects/${project.id}/case`}
-                      className="text-sm font-medium text-[#F8FAFC] hover:text-[#3B82F6] transition-colors"
-                    >
-                      {project.name}
-                    </Link>
-                    <p className="text-xs text-[#64748B] mt-0.5 line-clamp-1">
-                      {project.description}
-                    </p>
-                  </div>
-                  <div className="col-span-2">
-                    <StatusBadge status={project.status} />
-                  </div>
-                  <div className="col-span-2">
-                    <SignalDots strength={project.signal} />
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-xs text-[#94A3B8]">{project.stage}</span>
-                  </div>
-                  <div className="col-span-2 flex items-center justify-end gap-1">
-                    <Link
-                      to={`/projects/${project.id}/case`}
-                      className="p-1.5 text-[#94A3B8] hover:text-[#3B82F6] rounded-lg hover:bg-[rgba(59,130,246,0.1)] transition-all"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Link>
-                    <button className="p-1.5 text-[#94A3B8] hover:text-[#F8FAFC] rounded-lg hover:bg-[rgba(100,116,139,0.1)] transition-all">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button className="p-1.5 text-[#94A3B8] hover:text-[#F8FAFC] rounded-lg hover:bg-[rgba(100,116,139,0.1)] transition-all">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-
-          {/* Empty State */}
-          {!isLoading && filtered.length === 0 && (
-            <div className="py-12 text-center">
-              <FolderOpen className="w-10 h-10 text-[#334155] mx-auto mb-3" />
-              <p className="text-sm text-[#64748B]">No projects found</p>
-              <button
-                onClick={() => setModalOpen(true)}
-                className="mt-2 text-sm text-[#3B82F6] hover:underline"
-              >
-                Create your first project
-              </button>
-            </div>
-          )}
-        </GlassCard>
+        <div className="flex gap-2">
+          <select
+            value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-[13px] text-white focus:outline-none"
+          >
+            <option value="ALL">All Status</option>
+            {Object.entries(STATUS_CFG).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Create Modal */}
-      <CreateProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      {/* Table */}
+      <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-12 gap-3 px-5 py-3 border-b border-white/[0.06] text-[10px] text-[#475569] uppercase tracking-wider font-medium">
+          <div className="col-span-4">Project</div>
+          <div className="col-span-2">Status</div>
+          <div className="col-span-2">Signal</div>
+          <div className="col-span-2 hidden sm:block">Updated</div>
+          <div className="col-span-2 text-right">Actions</div>
+        </div>
+
+        {/* Rows */}
+        {isLoading ? (
+          <div className="px-5 py-8 text-center text-[#475569] text-[13px]">
+            <Loader2 size={18} className="animate-spin mx-auto mb-2 text-[#3B82F6]" /> Loading...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <FolderOpen size={24} className="text-[#1e293b] mx-auto mb-2" />
+            <p className="text-[13px] text-[#475569]">No projects found</p>
+          </div>
+        ) : (
+          filtered.map((project, i) => (
+            <motion.div
+              key={project.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, delay: i * 0.03 }}
+              className="grid grid-cols-12 gap-3 px-5 py-3 border-b border-white/[0.03] last:border-0 items-center hover:bg-white/[0.015] transition-colors group"
+            >
+              <div className="col-span-4 min-w-0">
+                <Link to={`/projects/${project.id}/case`} className="text-[13px] font-medium text-white truncate hover:text-[#3B82F6] transition-colors block">
+                  {project.name}
+                </Link>
+                <p className="text-[10px] text-[#475569] truncate">{project.description}</p>
+              </div>
+              <div className="col-span-2"><StatusBadge status={project.status} /></div>
+              <div className="col-span-2"><SignalDots strength={project.signalStrength} /></div>
+              <div className="col-span-2 hidden sm:block text-[11px] text-[#475569]">{timeAgo(project.updatedAt)}</div>
+              <div className="col-span-2 flex justify-end">
+                <Link
+                  to={`/projects/${project.id}/case`}
+                  className="p-1.5 text-[#334155] hover:text-[#3B82F6] rounded-md hover:bg-white/[0.04] transition-colors"
+                >
+                  <ChevronRight size={15} />
+                </Link>
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
+
+      <CreateModal open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
-  );
+  )
 }

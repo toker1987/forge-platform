@@ -1,12 +1,12 @@
-import { Routes, Route } from 'react-router-dom'
-import Home from '@/pages/Home'
-import Login from '@/pages/Login'
-import Dashboard from '@/pages/Dashboard'
-import Projects from '@/pages/Projects'
-import ProjectCase from '@/pages/ProjectCase'
-import ProjectBuild from '@/pages/ProjectBuild'
-import SettingsPage from '@/pages/SettingsPage'
-import Layout from '@/components/Layout'
+import { Routes, Route } from 'react-router-dom';
+import Home from '@/pages/Home';
+import Login from '@/pages/Login';
+import Dashboard from '@/pages/Dashboard';
+import Projects from '@/pages/Projects';
+import ProjectCase from '@/pages/ProjectCase';
+import ProjectBuild from '@/pages/ProjectBuild';
+import SettingsPage from '@/pages/SettingsPage';
+import Layout from '@/components/Layout';
 
 export default function App() {
   return (
@@ -21,5 +21,5 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
-  )
+  );
 }
